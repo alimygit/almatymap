@@ -5,7 +5,7 @@ Prototype. Static site. No backend.
 ## Host on GitHub Pages
 1. Create repo. Add `index.html`.
 2. Settings > Pages > Deploy from branch > `main` / root.
-3. Open `https://<user>.github.io/<repo>/`.
+3. Open `https://alimygit.github.io/almatymap/`.
 
 ## Notes
 - Demo votes are fake.
