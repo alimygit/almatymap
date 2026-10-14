@@ -1,1 +1,401 @@
-aaa
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What do you call it? Almaty neighborhood map</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root {
+    --paper: #f3f1ec;
+    --ink: #1d2a2f;
+    --muted: #6b787d;
+    --line: #d4d0c6;
+    --accent: #0f6b66;
+    --accent-ink: #ffffff;
+    --panel: #fbfaf7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #151b1e;
+      --ink: #e8ece9;
+      --muted: #94a1a5;
+      --line: #2c373b;
+      --accent: #4fc3b8;
+      --accent-ink: #0b1a18;
+      --panel: #1b2326;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 14px 18px 10px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: end; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+  .modes { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .modes button { border: 0; background: transparent; color: var(--ink); padding: 8px 14px; font: inherit; font-size: 0.95rem; cursor: pointer; }
+  .modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  main { flex: 1; min-height: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 16px; padding: 14px 18px 18px; overflow: auto; }
+  #mapwrap { position: relative; width: min(100%, calc(100vh - 150px)); min-width: 300px; aspect-ratio: 1; border: 1px solid var(--line); background: var(--paper); flex: none; }
+  #map { position: absolute; inset: 0; }
+  aside { flex: 1 1 260px; max-width: 360px; min-width: 240px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 0.95rem; }
+  aside h2 { margin: 0 0 6px; font-size: 1.05rem; }
+  aside p { margin: 0 0 10px; color: var(--muted); line-height: 1.4; }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+  input[type=text] { width: 100%; padding: 9px 10px; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { padding: 9px 14px; font: inherit; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #add-panel { display: none; }
+  body.add #add-panel { display: block; }
+  body.add #explore-panel { display: none; }
+  #legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+  #legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  #tip { position: absolute; pointer-events: none; z-index: 5; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 0.85rem; line-height: 1.35; box-shadow: 0 2px 10px rgba(0,0,0,.18); display: none; min-width: 150px; }
+  #tip b { display: block; margin-bottom: 3px; }
+  #tip .bar { height: 5px; border-radius: 3px; margin: 1px 0 4px; }
+  #tip .meta { color: var(--muted); font-size: 0.78rem; }
+  #status { margin-top: 10px; font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+  .small { font-size: 0.8rem; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+  .maplibregl-ctrl-attrib { font-size: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>What do you call it?</h1>
+    <p>Almaty neighborhood names, as locals use them.</p>
+  </div>
+  <div class="modes" role="group" aria-label="Mode">
+    <button id="m-explore" aria-pressed="true">Explore</button>
+    <button id="m-add" aria-pressed="false">Add a name</button>
+  </div>
+</header>
+
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="tip"></div>
+  </div>
+
+  <aside>
+    <div id="explore-panel">
+      <h2>Explore</h2>
+      <p>Hover a hexagon, or tap on mobile, to see the names people use there.</p>
+      <div id="legend"></div>
+    </div>
+
+    <div id="add-panel">
+      <h2>Add a name</h2>
+      <p>Type a name. Then paint the hexagons it covers. Drag to paint. Tap a painted hexagon to remove it.</p>
+      <label for="name">Neighborhood name</label>
+      <input id="name" type="text" maxlength="40" list="known" autocomplete="off" placeholder="e.g. Samal">
+      <datalist id="known"></datalist>
+      <div class="row">
+        <button class="btn primary" id="submit" disabled>Save name</button>
+        <button class="btn" id="clear">Clear selection</button>
+      </div>
+      <div id="status"></div>
+    </div>
+
+    <p class="small">Prototype. Demo data is made up. Your names save in this browser only.</p>
+    <div class="row">
+      <button class="btn" id="export">Download my names</button>
+      <button class="btn" id="reset">Delete my names</button>
+    </div>
+  </aside>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<script>
+(() => {
+  // ---------- Config ----------
+  const RES = 9;                         // H3 resolution (~175 m edge)
+  const BOUNDS = [[76.80, 43.14], [77.087, 43.35]]; // square around Almaty
+  const MAX_HEXES = 200, MAX_NAME = 40;
+  const STORE_KEY = 'almaty-names-user-votes-v1';
+
+  // Rough city outline [lng, lat]. Replace with OSM boundary later.
+  const CITY = [
+    [76.84,43.22],[76.85,43.28],[76.89,43.32],[76.97,43.335],[77.03,43.31],
+    [77.055,43.25],[77.03,43.205],[76.99,43.18],[76.93,43.17],[76.88,43.18],[76.84,43.22]
+  ];
+
+  // Name aliases -> canonical
+  const ALIASES = {
+    'самал':'Samal','samal':'Samal','самал-2':'Samal',
+    'коктем':'Koktem','koktem':'Koktem','көктем':'Koktem',
+    'достык':'Dostyk','dostyk':'Dostyk',
+    'аксай':'Aksai','aksai':'Aksai','ақсай':'Aksai',
+    'орбита':'Orbita','orbita':'Orbita',
+    'алмалы':'Almaly','almaly':'Almaly',
+    'жетысу':'Zhetysu','zhetysu':'Zhetysu','жетісу':'Zhetysu',
+    'тастак':'Tastak','tastak':'Tastak',
+    'алатау':'Alatau','alatau':'Alatau',
+    'мамыр':'Mamyr','mamyr':'Mamyr',
+    'горный гигант':'Gorny Gigant','gorny gigant':'Gorny Gigant',
+    'казахфильм':'Kazakhfilm','kazakhfilm':'Kazakhfilm'
+  };
+  const canon = s => {
+    const t = s.trim().replace(/\s+/g, ' ').slice(0, MAX_NAME);
+    return ALIASES[t.toLowerCase()] || (t.charAt(0).toUpperCase() + t.slice(1));
+  };
+
+  // Demo seeds [name, lat, lng]
+  const DEMO = [
+    ['Samal',43.228,76.955],['Dostyk',43.236,76.958],['Koktem',43.215,76.905],
+    ['Aksai',43.235,76.855],['Orbita',43.222,76.882],['Almaly',43.258,76.945],
+    ['Tastak',43.262,76.905],['Zhetysu',43.285,76.89],['Alatau',43.285,77.0],
+    ['Mamyr',43.20,76.86],['Gorny Gigant',43.195,76.96],['Kazakhfilm',43.195,76.925]
+  ];
+
+  // ---------- Hex grid ----------
+  const cells = h3.polygonToCells(CITY, RES, true);
+  const cellSet = new Set(cells);
+  const geom = {};
+  cells.forEach(id => { geom[id] = h3.cellToBoundary(id, true); });
+
+  // ---------- Votes ----------
+  const demoVotes = {};
+  (function seed() {
+    let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const km = (la1, lo1, la2, lo2) => {
+      const dy = (la1 - la2) * 111.3, dx = (lo1 - lo2) * 81.1; return Math.hypot(dx, dy);
+    };
+    cells.forEach(id => {
+      const [la, lo] = h3.cellToLatLng(id);
+      DEMO.forEach(([name, cla, clo]) => {
+        const d = km(la, lo, cla, clo);
+        const w = Math.exp(-Math.pow(d / 1.7, 2));
+        const n = Math.round(w * 18 * (0.5 + rnd()));
+        if (n >= 1) { (demoVotes[id] ||= {})[name] = n; }
+      });
+    });
+  })();
+
+  let userVotes = {};
+  try { userVotes = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (e) {}
+  const saveUser = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(userVotes)); } catch (e) {} };
+
+  function tally(id) {
+    const out = {};
+    [demoVotes[id], userVotes[id]].forEach(src => {
+      if (!src) return;
+      for (const k in src) out[k] = (out[k] || 0) + src[k];
+    });
+    const total = Object.values(out).reduce((a, b) => a + b, 0);
+    const list = Object.entries(out).sort((a, b) => b[1] - a[1]);
+    return { list, total };
+  }
+
+  const hue = n => { let h = 0; for (const c of n) h = (h * 31 + c.charCodeAt(0) * 7) % 360; return h; };
+  const color = n => `hsl(${hue(n)} 62% 46%)`;
+
+  // ---------- State ----------
+  let mode = 'explore';
+  const selected = new Set();
+  let hoverId = null, painting = false, paintAdd = true;
+
+  // ---------- Map ----------
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        base: {
+          type: 'raster',
+          tiles: ['https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png'],
+          tileSize: 256, maxzoom: 18,
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }
+      },
+      layers: [{ id: 'base', type: 'raster', source: 'base', paint: { 'raster-saturation': -0.4, 'raster-opacity': 0.9 } }]
+    },
+    bounds: BOUNDS,
+    fitBoundsOptions: { padding: 0 },
+    maxBounds: [[BOUNDS[0][0] - 0.01, BOUNDS[0][1] - 0.01], [BOUNDS[1][0] + 0.01, BOUNDS[1][1] + 0.01]],
+    maxZoom: 16,
+    dragRotate: false, pitchWithRotate: false, touchPitch: false,
+    attributionControl: { compact: true }
+  });
+  map.touchZoomRotate.disableRotation();
+
+  function hexData() {
+    return {
+      type: 'FeatureCollection',
+      features: cells.map(id => {
+        const { list, total } = tally(id);
+        const top = list[0];
+        const share = top ? top[1] / total : 0;
+        return {
+          type: 'Feature',
+          properties: {
+            id,
+            c: top ? color(top[0]) : '#888888',
+            o: top ? 0.28 + 0.57 * share : 0,
+            sel: selected.has(id) ? 1 : 0
+          },
+          geometry: { type: 'Polygon', coordinates: [geom[id]] }
+        };
+      })
+    };
+  }
+  const refresh = () => map.getSource('hex').setData(hexData());
+
+  map.on('load', () => {
+    map.setMinZoom(map.getZoom() - 0.05);
+
+    // Mask everything outside the city
+    const big = [[-180,-85],[180,-85],[180,85],[-180,85],[-180,-85]];
+    map.addSource('mask', { type: 'geojson', data: {
+      type: 'Feature', properties: {},
+      geometry: { type: 'Polygon', coordinates: [big, [...CITY].reverse()] }
+    }});
+    map.addLayer({ id: 'mask', type: 'fill', source: 'mask',
+      paint: { 'fill-color': getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#f3f1ec' } });
+
+    map.addSource('hex', { type: 'geojson', data: hexData() });
+    map.addLayer({ id: 'hex-fill', type: 'fill', source: 'hex',
+      paint: { 'fill-color': ['get', 'c'], 'fill-opacity': ['get', 'o'] } });
+    map.addLayer({ id: 'hex-line', type: 'line', source: 'hex',
+      paint: { 'line-color': '#ffffff', 'line-opacity': 0.35, 'line-width': 0.6 } });
+    map.addLayer({ id: 'hex-sel', type: 'fill', source: 'hex', filter: ['==', ['get', 'sel'], 1],
+      paint: { 'fill-color': '#111111', 'fill-opacity': 0.35 } });
+    map.addLayer({ id: 'hex-sel-line', type: 'line', source: 'hex', filter: ['==', ['get', 'sel'], 1],
+      paint: { 'line-color': '#111111', 'line-width': 1.6 } });
+    map.addSource('hover', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'hover-line', type: 'line', source: 'hover',
+      paint: { 'line-color': '#111111', 'line-width': 2 } });
+
+    buildLegend(); buildDatalist();
+  });
+
+  // ---------- Hover / tooltip ----------
+  const tip = document.getElementById('tip');
+  const wrap = document.getElementById('mapwrap');
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function hexAt(lngLat) {
+    const id = h3.latLngToCell(lngLat.lat, lngLat.lng, RES);
+    return cellSet.has(id) ? id : null;
+  }
+  function setHover(id) {
+    if (id === hoverId) return;
+    hoverId = id;
+    map.getSource('hover').setData(id
+      ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geom[id]] } }
+      : { type: 'FeatureCollection', features: [] });
+  }
+  function showTip(id, pt) {
+    if (!id || mode !== 'explore') { tip.style.display = 'none'; return; }
+    const { list, total } = tally(id);
+    let html;
+    if (!total) html = '<b>No names yet</b><span class="meta">Be the first. Use “Add a name”.</span>';
+    else {
+      html = list.slice(0, 3).map(([n, v]) => {
+        const p = Math.round(v / total * 100);
+        return `<div>${esc(n)} <span class="meta">${p}%</span></div><div class="bar" style="width:${p}%;background:${color(n)}"></div>`;
+      }).join('') + `<div class="meta">${total} vote${total === 1 ? '' : 's'}${list.length > 3 ? ` · +${list.length - 3} more` : ''}</div>`;
+    }
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, h = tip.offsetHeight, W = wrap.clientWidth, H = wrap.clientHeight;
+    let x = pt.x + 14, y = pt.y + 14;
+    if (x + w > W - 4) x = pt.x - w - 14;
+    if (y + h > H - 4) y = pt.y - h - 14;
+    tip.style.left = Math.max(4, x) + 'px';
+    tip.style.top = Math.max(4, y) + 'px';
+  }
+
+  map.on('mousemove', e => {
+    const id = hexAt(e.lngLat);
+    setHover(id);
+    if (mode === 'explore') showTip(id, e.point);
+    else { tip.style.display = 'none'; if (painting && id) paint(id); }
+  });
+  map.on('mouseout', () => { setHover(null); tip.style.display = 'none'; });
+  map.on('click', e => { if (mode === 'explore') { const id = hexAt(e.lngLat); setHover(id); showTip(id, e.point); } });
+
+  // ---------- Painting ----------
+  function paint(id) {
+    if (paintAdd) { if (selected.size >= MAX_HEXES && !selected.has(id)) { status(`Limit is ${MAX_HEXES} hexagons.`); return; } selected.add(id); }
+    else selected.delete(id);
+    refresh(); updateSubmit();
+  }
+  function startPaint(e) {
+    if (mode !== 'add') return;
+    const id = hexAt(e.lngLat); if (!id) return;
+    painting = true; paintAdd = !selected.has(id); paint(id);
+  }
+  const stopPaint = () => { painting = false; };
+  map.on('mousedown', startPaint);
+  map.on('touchstart', startPaint);
+  map.on('touchmove', e => { if (painting) { const id = hexAt(e.lngLat); if (id) paint(id); } });
+  map.on('mouseup', stopPaint); map.on('touchend', stopPaint);
+  window.addEventListener('mouseup', stopPaint);
+
+  // ---------- UI ----------
+  const nameEl = document.getElementById('name');
+  const submitEl = document.getElementById('submit');
+  const statusEl = document.getElementById('status');
+  const status = t => { statusEl.textContent = t; };
+  function updateSubmit() {
+    submitEl.disabled = !(nameEl.value.trim() && selected.size);
+    submitEl.textContent = selected.size ? `Save name (${selected.size} hex${selected.size === 1 ? '' : 'es'})` : 'Save name';
+  }
+  nameEl.addEventListener('input', updateSubmit);
+
+  function setMode(m) {
+    mode = m;
+    document.body.classList.toggle('add', m === 'add');
+    document.getElementById('m-explore').setAttribute('aria-pressed', m === 'explore');
+    document.getElementById('m-add').setAttribute('aria-pressed', m === 'add');
+    if (m === 'add') { map.dragPan.disable(); map.getCanvas().style.cursor = 'crosshair'; }
+    else { map.dragPan.enable(); map.getCanvas().style.cursor = ''; selected.clear(); refresh(); updateSubmit(); }
+    tip.style.display = 'none';
+  }
+  document.getElementById('m-explore').onclick = () => setMode('explore');
+  document.getElementById('m-add').onclick = () => { setMode('add'); nameEl.focus(); };
+
+  document.getElementById('clear').onclick = () => { selected.clear(); refresh(); updateSubmit(); status(''); };
+  submitEl.onclick = () => {
+    const name = canon(nameEl.value);
+    if (!name || !selected.size) return;
+    selected.forEach(id => { const u = (userVotes[id] ||= {}); u[name] = (u[name] || 0) + 1; });
+    saveUser();
+    const n = selected.size;
+    selected.clear(); nameEl.value = '';
+    refresh(); updateSubmit(); buildLegend(); buildDatalist();
+    status(`Saved “${name}” on ${n} hexagon${n === 1 ? '' : 's'}.`);
+  };
+  document.getElementById('export').onclick = () => {
+    const blob = new Blob([JSON.stringify({ resolution: RES, votes: userVotes }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'almaty-names.json'; a.click();
+  };
+  document.getElementById('reset').onclick = () => {
+    if (!confirm('Delete all names you added in this browser?')) return;
+    userVotes = {}; saveUser(); refresh(); buildLegend(); buildDatalist();
+  };
+
+  function allNames() {
+    const t = {};
+    cells.forEach(id => { const { list } = tally(id); if (list[0]) t[list[0][0]] = (t[list[0][0]] || 0) + 1; });
+    return Object.entries(t).sort((a, b) => b[1] - a[1]);
+  }
+  function buildLegend() {
+    document.getElementById('legend').innerHTML =
+      allNames().map(([n, c]) => `<span><i style="background:${color(n)}"></i>${esc(n)}</span>`).join('');
+  }
+  function buildDatalist() {
+    const names = new Set(); cells.forEach(id => tally(id).list.forEach(([n]) => names.add(n)));
+    document.getElementById('known').innerHTML = [...names].sort().map(n => `<option value="${esc(n)}">`).join('');
+  }
+})();
+</script>
+</body>
+</html>
